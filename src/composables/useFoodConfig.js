@@ -2,7 +2,6 @@
 import { ref, computed } from 'vue';
 import { DEFAULT_FOODS, DEFAULT_RULES } from '../default-data';
 
-// 全局单例状态，保证跨页面数据一致
 const allFoods = ref(JSON.parse(localStorage.getItem('food_config')) || DEFAULT_FOODS);
 const rules = ref(JSON.parse(localStorage.getItem('wheel_rules')) || DEFAULT_RULES);
 
@@ -17,36 +16,18 @@ export function useFoodConfig() {
     localStorage.setItem('wheel_rules', JSON.stringify(rules.value));
   };
 
-  // 提取当前所有存在的标签（去重）
+  // 提取当前所有存在的标签（去重），用于管理界面的快速选择和首页的过滤
   const allAvailableTags = computed(() => {
     const tags = new Set();
     const extractTags = (items) => {
       items.forEach(item => {
-        item.tags?.forEach(t => tags.add(t));
+        if (item.tags) item.tags.forEach(t => tags.add(t));
         if (item.children) extractTags(item.children);
       });
     };
     extractTags(allFoods.value);
     return Array.from(tags);
   });
-
-  // 导入配置
-  const importData = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = JSON.parse(e.target.result);
-          if (data.foods) saveFoods(data.foods);
-          if (data.rules) saveRules(data.rules);
-          resolve(true);
-        } catch (err) {
-          reject("文件格式错误，请上传正确的 JSON 文件");
-        }
-      };
-      reader.readAsText(file);
-    });
-  };
 
   // 导出配置
   const exportData = () => {
@@ -55,10 +36,19 @@ export function useFoodConfig() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `food_config_${new Date().getTime()}.json`;
+    a.download = `food_config_${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
-  return { allFoods, rules, saveFoods, saveRules, allAvailableTags, importData, exportData };
+  return { 
+    allFoods, 
+    rules, 
+    saveFoods, 
+    saveRules, 
+    allAvailableTags, 
+    exportData 
+  };
 }

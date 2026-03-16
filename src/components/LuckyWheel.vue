@@ -1,7 +1,7 @@
 <template>
     <div class="wheel-container">
       <div class="wheel-wrapper">
-        <canvas ref="canvasRef" width="360" height="360"></canvas>
+        <canvas ref="canvasRef" width="360" height="360" class="responsive-canvas"></canvas>
         <div class="pointer">▼</div>
       </div>
     </div>
@@ -14,16 +14,12 @@
     items: { type: Array, required: true },
     isSpinning: { type: Boolean, default: false }
   });
-  
   const emit = defineEmits(['spin-end']);
   
   const canvasRef = ref(null);
   const colors = ["#FF9999", "#99CCFF", "#99FF99", "#FFCC99", "#E6B3FF", "#FFFF99", "#FFB3E6"];
   let currentRotation = 0;
   let slices = [];
-  
-  // 将原版 App.vue 中的 calculateSlices, drawWheel, spinWheel 移到这里...
-  // (为了篇幅省略部分Canvas绘图重复代码，逻辑与V4.0一致)
   
   const drawWheel = () => {
     if (!canvasRef.value) return;
@@ -36,9 +32,9 @@
     ctx.rotate(currentRotation);
     ctx.translate(-cx, -cy);
   
-    // 计算和绘制逻辑与之前完全一样...
     let totalWeight = props.items.reduce((sum, item) => sum + item.weight, 0);
     let startAngle = 0;
+    
     slices = props.items.filter(i => i.weight > 0).map((item, index) => {
       const extent = (item.weight / totalWeight) * (Math.PI * 2);
       const slice = { ...item, start: startAngle, extent, color: colors[index % colors.length] };
@@ -73,8 +69,6 @@
   
   const executeSpin = () => {
     if (slices.length === 0) return;
-    
-    // 按照权重随机选出 winner
     const total = slices.reduce((sum, i) => sum + i.weight, 0);
     let random = Math.random() * total;
     let winner = slices[0];
@@ -100,21 +94,43 @@
         requestAnimationFrame(animate);
       } else {
         currentRotation %= (Math.PI * 2);
-        emit('spin-end', winner); // 将抽中的对象抛出给父组件！
+        emit('spin-end', winner);
       }
     };
     requestAnimationFrame(animate);
   };
   
-  watch(() => props.isSpinning, (newVal) => {
-    if (newVal) executeSpin();
-  });
-  
+  watch(() => props.isSpinning, (newVal) => { if (newVal) executeSpin(); });
   watch(() => props.items, () => { drawWheel(); }, { deep: true });
   onMounted(drawWheel);
   </script>
   
   <style scoped>
-  .wheel-wrapper { position: relative; width: 360px; height: 360px; margin: 0 auto; }
-  .pointer { position: absolute; top: -15px; left: 50%; transform: translateX(-50%); color: #FF3333; font-size: 30px; z-index: 10; text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+  .wheel-container {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+  .wheel-wrapper {
+    position: relative;
+    width: 100%;
+    max-width: 360px; /* PC端最大限制 */
+    aspect-ratio: 1 / 1; /* 保持正方形 */
+  }
+  /* 核心：让画布在移动端等比缩放 */
+  .responsive-canvas {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .pointer {
+    position: absolute;
+    top: -5%;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #FF3333;
+    font-size: clamp(24px, 8vw, 30px); /* 根据屏幕自动调整箭头大小 */
+    z-index: 10;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
   </style>
