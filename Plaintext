@@ -1,0 +1,12 @@
+src/
+├── components/
+│   ├── LuckyWheel.vue      # (纯UI) 只负责接收数据并渲染转盘、播放动画
+│   ├── FilterBar.vue       # (纯UI) 负责渲染顶部的标签开关
+│   └── HistoryPanel.vue    # (纯UI) 历史记录与最终确认面板
+├── composables/
+│   ├── useFoodConfig.js    # (状态/逻辑) 负责食谱数据、标签过滤、导入导出
+│   └── useWheelAlgorithm.js# (状态/逻辑) 负责根据“算法规则配置”动态计算权重
+├── default-data.js         # 存放默认的食谱和算法规则
+├── App.vue                 # 主入口，负责将组件组装，处理多级转盘逻辑
+├── main.js
+└── style.css

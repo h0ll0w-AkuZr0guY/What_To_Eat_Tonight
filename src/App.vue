@@ -1,300 +1,184 @@
 <template>
   <div class="app-container">
     <header>
-      <h1>命运转盘</h1>
+      <h1>命运转盘 v5.0 (组件化 & 多级架构)</h1>
     </header>
 
     <main class="layout-container">
-      
       <section class="wheel-section">
-        <div class="wheel-wrapper">
-          <canvas ref="canvasRef" width="360" height="360"></canvas>
-          <div class="pointer">▼</div>
+        
+        <div class="tags-filter">
+          <span>过滤标签: </span>
+          <label v-for="tag in allTags" :key="tag">
+            <input type="checkbox" :value="tag" v-model="selectedTags">
+            {{ tag }}
+          </label>
         </div>
-        <p class="status-text" :class="{ 'highlight': isSpinning }">{{ statusText }}</p>
-        <button class="spin-btn" :disabled="isSpinning" @click="spinWheel">
-          开始命运的转动！
+
+        <div class="breadcrumb" v-if="wheelStack.length > 1">
+          <button @click="goBack" class="back-btn">⬅ 返回上一级 (当前: {{ currentGroupName }})</button>
+        </div>
+
+        <LuckyWheel 
+          :items="currentWheelItems" 
+          :isSpinning="isSpinning"
+          @spin-end="handleSpinEnd" 
+        />
+        
+        <p class="status-text">{{ statusText }}</p>
+        
+        <button class="spin-btn" :disabled="isSpinning" @click="isSpinning = true">
+          {{ wheelStack.length > 1 ? '开始抽取子分类！' : '开始命运的转动！' }}
         </button>
       </section>
 
       <section class="log-section">
-        <h3>📝 干饭日志 & 最终决定</h3>
+        <h3>📝 操作区</h3>
+        <button class="export-btn" @click="exportData">📥 导出食谱与规则</button>
         
-        <div class="log-box">
-          <div v-for="(entry, index) in recentHistory" :key="index" class="log-item">
-            <span class="date">{{ entry.date }}</span>
-            <span class="name">{{ entry.name }}</span>
-          </div>
-          <div v-if="recentHistory.length === 0" class="empty-log">暂无记录，快去干饭！</div>
-        </div>
-
-        <div class="action-box">
-          <label>最终决定吃什么？</label>
-          <select v-model="selectedChoice" :disabled="isSpinning">
-            <option v-for="item in baseItems" :key="item.name" :value="item.name">
-              {{ item.name }}
-            </option>
-          </select>
-          <button class="confirm-btn" :disabled="isSpinning || !selectedChoice" @click="saveChoice">
+        <div style="margin-top: 20px;">
+          <label>最终决定：</label>
+          <input type="text" v-model="finalChoice" disabled style="width: 100%; padding: 8px; margin-top: 5px;">
+          <button class="confirm-btn" :disabled="isSpinning || !finalChoice" @click="confirmChoice">
             ✅ 确认并写入日志
           </button>
         </div>
       </section>
-      
     </main>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue';
+import LuckyWheel from './components/LuckyWheel.vue';
+import { DEFAULT_FOODS } from './default-data';
+import { useWheelAlgorithm } from './composables/useWheelAlgorithm';
 
-// === 1. 基础配置 ===
-const baseItems = [
-  { name: "科大食府", weight: 10 },
-  { name: "二至坊&三白馆", weight: 10 },
-  { name: "MC", weight: 15 },
-  { name: "科大社区食堂", weight: 10 },
-  { name: "杀猪粉", weight: 10 },
-  { name: "沙县小吃", weight: 10 }
-]
-const colors = ["#FF9999", "#99CCFF", "#99FF99", "#FFCC99", "#E6B3FF", "#FFFF99", "#FFB3E6"]
+// --- 状态管理 ---
+const allFoods = ref(JSON.parse(localStorage.getItem('food_config')) || DEFAULT_FOODS);
+const { calculateDynamicWeights, saveHistory } = useWheelAlgorithm();
 
-// === 2. 状态管理 ===
-const history = ref(JSON.parse(localStorage.getItem('food_history')) || [])
-const currentItems = ref([])
-const slices = ref([])
-const isSpinning = ref(false)
-const statusText = ref("点击下方按钮，把决定权交给命运")
-const selectedChoice = ref(baseItems[0].name)
-const canvasRef = ref(null)
-let currentRotation = 0 // 当前转盘角度
+const isSpinning = ref(false);
+const statusText = ref("点击下方按钮");
+const finalChoice = ref("");
 
-const recentHistory = computed(() => history.value.slice(-15).reverse())
+// --- 标签过滤逻辑 ---
+const allTags = computed(() => {
+  const tags = new Set();
+  const extractTags = (items) => {
+    items.forEach(item => {
+      item.tags?.forEach(t => tags.add(t));
+      if (item.children) extractTags(item.children);
+    });
+  };
+  extractTags(allFoods.value);
+  return Array.from(tags);
+});
+const selectedTags = ref([]); // 选中的标签（为空代表不过滤）
 
-// === 3. 核心智能权重逻辑 (完美复刻 Python 3.0 版本) ===
-const refreshWheelData = () => {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+// 根据标签过滤食谱 (仅保留包含选中标签的项)
+const filteredFoods = computed(() => {
+  if (selectedTags.value.length === 0) return allFoods.value;
   
-  const currentMonday = new Date(today)
-  const dayOfWeek = today.getDay() === 0 ? 6 : today.getDay() - 1 // 0是周一
-  currentMonday.setDate(today.getDate() - dayOfWeek)
-
-  const dailyLog = {}
-  history.value.forEach(entry => { dailyLog[entry.date] = entry.name })
-
-  const tempItems = []
-  baseItems.forEach(item => {
-    let w = item.weight
-    let absent7Days = true
-    
-    // 连续7天未吃奖励
-    for(let i=1; i<=7; i++) {
-      const d = new Date(today)
-      d.setDate(d.getDate() - i)
-      const dStr = d.toISOString().split('T')[0]
-      if (dailyLog[dStr] === item.name) {
-        absent7Days = false
-        break
+  const filterNodes = (items) => {
+    return items.map(item => {
+      // 如果是组，递归过滤子项
+      if (item.isGroup && item.children) {
+        const filteredChildren = filterNodes(item.children);
+        // 如果子项有符合条件的，保留这个组
+        if (filteredChildren.length > 0) return { ...item, children: filteredChildren };
       }
-    }
-    if (absent7Days && Object.keys(dailyLog).length > 0) w *= 1.5
-
-    // 本周衰减惩罚
-    let occurrencesThisWeek = 0
-    let curr = new Date(currentMonday)
-    while(curr <= today) {
-      if (dailyLog[curr.toISOString().split('T')[0]] === item.name) occurrencesThisWeek++
-      curr.setDate(curr.getDate() + 1)
-    }
-    if (occurrencesThisWeek > 0) w *= Math.pow(0.5, occurrencesThisWeek)
-
-    // 连续两天防爆肝 (归零)
-    const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1)
-    const dayBefore = new Date(today); dayBefore.setDate(dayBefore.getDate() - 2)
-    if (dailyLog[yesterday.toISOString().split('T')[0]] === item.name && 
-        dailyLog[dayBefore.toISOString().split('T')[0]] === item.name) {
-      w = 0
-    }
-
-    tempItems.push({ ...item, weight: Number(w.toFixed(2)) })
-  })
-
-  currentItems.value = tempItems
-  calculateSlices()
-  drawWheel()
-}
-
-// === 4. 转盘绘制逻辑 ===
-const calculateSlices = () => {
-  let totalWeight = currentItems.value.reduce((sum, item) => sum + item.weight, 0)
-  const itemsToUse = totalWeight > 0 ? currentItems.value : baseItems
-  totalWeight = itemsToUse.reduce((sum, item) => sum + item.weight, 0)
-
-  let startAngle = 0
-  slices.value = itemsToUse.filter(item => item.weight > 0).map((item, index) => {
-    const extent = (item.weight / totalWeight) * (Math.PI * 2) // 换成弧度
-    const slice = { name: item.name, weight: item.weight, start: startAngle, extent, color: colors[index % colors.length] }
-    startAngle += extent
-    return slice
-  })
-}
-
-const drawWheel = () => {
-  if (!canvasRef.value) return
-  const ctx = canvasRef.value.getContext('2d')
-  const cx = 180, cy = 180, r = 170
+      // 判断自身是否包含任何选中的tag
+      const hasTag = item.tags?.some(tag => selectedTags.value.includes(tag));
+      return hasTag ? item : null;
+    }).filter(Boolean);
+  };
   
-  ctx.clearRect(0, 0, 360, 360)
-  ctx.save()
-  ctx.translate(cx, cy)
-  ctx.rotate(currentRotation) // 旋转整个画布
-  ctx.translate(-cx, -cy)
+  return filterNodes(allFoods.value);
+});
 
-  slices.value.forEach(slice => {
-    ctx.beginPath()
-    ctx.moveTo(cx, cy)
-    ctx.arc(cx, cy, r, slice.start, slice.start + slice.extent)
-    ctx.fillStyle = slice.color
-    ctx.fill()
-    ctx.lineWidth = 2
-    ctx.strokeStyle = "white"
-    ctx.stroke()
+// --- 多级转盘逻辑 (核心机制) ---
+// 我们用一个数组模拟“栈”。栈顶（数组最后一个元素）就是当前转盘要显示的数据列表
+const wheelStack = ref([]);
+const currentGroupName = ref("");
 
-    // 绘制文字
-    const midAngle = slice.start + slice.extent / 2
-    const textX = cx + (r * 0.65) * Math.cos(midAngle)
-    const textY = cy + (r * 0.65) * Math.sin(midAngle)
-    
-    ctx.save()
-    ctx.translate(textX, textY)
-    ctx.rotate(midAngle + Math.PI / 2) // 让文字朝向圆心
-    ctx.fillStyle = "#333"
-    ctx.font = "bold 14px 'Microsoft YaHei'"
-    ctx.textAlign = "center"
-    ctx.fillText(slice.name, 0, -5)
-    ctx.font = "12px 'Microsoft YaHei'"
-    ctx.fillText(`(w: ${slice.weight})`, 0, 10)
-    ctx.restore()
-  })
-  ctx.restore()
-}
+// 每次过滤条件或基础数据变化，重新计算动态权重并重置栈
+watch(filteredFoods, (newFoods) => {
+  const weightedFoods = calculateDynamicWeights(newFoods);
+  wheelStack.value = [weightedFoods]; // 根层级
+}, { immediate: true });
 
-// === 5. 动画与抽签核心 ===
-const weightedRandom = (items) => {
-  const total = items.reduce((sum, i) => sum + i.weight, 0)
-  let random = Math.random() * total
-  for (let item of items) {
-    if (random < item.weight) return item.name
-    random -= item.weight
+// 当前转盘实际渲染的数据
+const currentWheelItems = computed(() => wheelStack.value[wheelStack.value.length - 1] || []);
+
+const goBack = () => {
+  if (wheelStack.value.length > 1) {
+    wheelStack.value.pop();
+    currentGroupName.value = "";
+    statusText.value = "已返回上一级";
   }
-  return items[0].name
-}
+};
 
-const spinWheel = () => {
-  if (slices.value.length === 0) return
-  isSpinning.value = true
-  statusText.value = "命运转动中..."
-
-  const winnerName = weightedRandom(slices.value)
-  const winnerSlice = slices.value.find(s => s.name === winnerName)
-
-  // 计算落点 (让指针落在抽中扇形的随机位置)
-  const minAngle = winnerSlice.start + 0.05
-  const maxAngle = winnerSlice.start + winnerSlice.extent - 0.05
-  const targetAngle = minAngle + Math.random() * (maxAngle - minAngle)
+// 监听转盘组件抛出的结果
+const handleSpinEnd = (winner) => {
+  isSpinning.value = false;
   
-  // 指针在正上方 (-PI/2)，计算需要的偏移
-  const targetOffset = (Math.PI * 1.5) - targetAngle
-  
-  // 基础多转 10 圈
-  const totalRotation = currentRotation + (Math.PI * 2 * 10) + ((targetOffset - currentRotation) % (Math.PI * 2))
-
-  // 动画缓动 (Ease-out)
-  const duration = 4000
-  const startRotation = currentRotation
-  const startTime = performance.now()
-
-  const animate = (time) => {
-    const elapsed = time - startTime
-    const t = Math.min(elapsed / duration, 1)
-    const easeOut = 1 - Math.pow(1 - t, 4) // 缓动函数
-    
-    currentRotation = startRotation + (totalRotation - startRotation) * easeOut
-    drawWheel()
-
-    if (t < 1) {
-      requestAnimationFrame(animate)
-    } else {
-      currentRotation = currentRotation % (Math.PI * 2) // 防止数值过大
-      isSpinning.value = false
-      statusText.value = `天意选择了：【 ${winnerName} 】！`
-      selectedChoice.value = winnerName
-    }
+  if (winner.isGroup) {
+    // 抽中了一个分类（如：吃点好的），将子分类压入栈中，触发二级转盘！
+    statusText.value = `抽中了分组【${winner.name}】，请继续抽取具体项！`;
+    currentGroupName.value = winner.name;
+    // 子项的权重在初始化时已经被 calculateDynamicWeights 处理过了
+    wheelStack.value.push(winner.children); 
+  } else {
+    // 抽中了具体的食物
+    statusText.value = `天意选择了：【 ${winner.name} 】！`;
+    finalChoice.value = winner.name;
   }
-  requestAnimationFrame(animate)
-}
+};
 
-// === 6. 日志保存 ===
-const saveChoice = () => {
-  const todayStr = new Date().toISOString().split('T')[0]
-  // 覆盖今日记录
-  history.value = history.value.filter(entry => entry.date !== todayStr)
-  history.value.push({ date: todayStr, name: selectedChoice.value })
+// --- 日志与导出 ---
+const confirmChoice = () => {
+  saveHistory(finalChoice.value);
+  statusText.value = "已记录！权重已重新计算。";
   
-  localStorage.setItem('food_history', JSON.stringify(history.value))
-  statusText.value = `已记录今日干饭：${selectedChoice.value}！`
-  
-  refreshWheelData()
-}
+  // 重新计算权重并重置回最外层转盘
+  const weightedFoods = calculateDynamicWeights(filteredFoods.value);
+  wheelStack.value = [weightedFoods];
+};
 
-onMounted(() => {
-  refreshWheelData()
-})
+const exportData = () => {
+  const data = { foods: allFoods.value, rules: DEFAULT_RULES };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'wheel_config.json';
+  a.click();
+};
 </script>
 
 <style>
-/* 响应式魔法写在这里 */
+/* 延续之前的样式设计，新增过滤器的样式 */
 body { margin: 0; background-color: #f0f2f5; font-family: 'Microsoft YaHei', sans-serif; }
 .app-container { max-width: 1000px; margin: 0 auto; padding: 20px; }
-header { text-align: center; margin-bottom: 20px; color: #333; }
+header { text-align: center; margin-bottom: 20px; }
+.layout-container { display: flex; flex-direction: column; gap: 30px; }
+@media (min-width: 768px) { .layout-container { flex-direction: row; align-items: flex-start; } .wheel-section { flex: 3; } .log-section { flex: 2; position: sticky; top: 20px; } }
 
-/* 核心布局：手机默认纵向，靠 @media 实现电脑横向 */
-.layout-container {
-  display: flex;
-  flex-direction: column; /* 手机端上下布局 */
-  gap: 30px;
-}
+.wheel-section, .log-section { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); text-align: center; }
 
-@media (min-width: 768px) {
-  .layout-container {
-    flex-direction: row; /* PC端左右布局 */
-    align-items: flex-start;
-  }
-  .wheel-section { flex: 3; }
-  .log-section { flex: 2; position: sticky; top: 20px; }
-}
+/* 标签过滤器样式 */
+.tags-filter { margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px; text-align: left;}
+.tags-filter label { margin-right: 15px; cursor: pointer; font-size: 14px; }
 
-/* 组件样式 */
-.wheel-section { text-align: center; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-.wheel-wrapper { position: relative; width: 360px; height: 360px; margin: 0 auto 20px; }
-.pointer { position: absolute; top: -15px; left: 50%; transform: translateX(-50%); color: #FF3333; font-size: 30px; z-index: 10; text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-.status-text { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #555; transition: color 0.3s; }
-.status-text.highlight { color: #2196F3; }
+/* 导航返回按钮 */
+.breadcrumb { margin-bottom: 15px; }
+.back-btn { background: #ff9800; color: white; border: none; padding: 8px 16px; border-radius: 20px; cursor: pointer; }
 
-button { padding: 12px 24px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: transform 0.1s, opacity 0.3s; }
-button:active { transform: scale(0.95); }
+button { padding: 12px 24px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
-.spin-btn { background-color: #4CAF50; color: white; width: 80%; max-width: 300px; }
+.spin-btn { background-color: #4CAF50; color: white; width: 80%; margin-top: 15px; }
 .confirm-btn { background-color: #2196F3; color: white; width: 100%; margin-top: 10px; }
-
-.log-section { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-.log-box { background: #f8f9fa; border: 1px solid #eee; border-radius: 8px; height: 200px; overflow-y: auto; padding: 10px; margin-bottom: 20px; }
-.log-item { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px dashed #ddd; font-size: 14px; }
-.log-item .date { color: #888; }
-.log-item .name { font-weight: bold; color: #333; }
-.empty-log { text-align: center; color: #999; margin-top: 80px; }
-
-.action-box { display: flex; flex-direction: column; gap: 8px; }
-select { padding: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 16px; outline: none; }
+.export-btn { background-color: #607d8b; color: white; width: 100%; }
+.status-text { font-size: 18px; font-weight: bold; margin: 15px 0; color: #E91E63; }
 </style>
