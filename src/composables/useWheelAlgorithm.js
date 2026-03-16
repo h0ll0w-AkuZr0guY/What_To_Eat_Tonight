@@ -6,23 +6,24 @@ export function useWheelAlgorithm() {
   const rules = ref(JSON.parse(localStorage.getItem('wheel_rules')) || DEFAULT_RULES);
   const history = ref(JSON.parse(localStorage.getItem('food_history')) || []);
 
-  // 递归计算权重的函数，支持处理子分类
   const calculateDynamicWeights = (items) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    // 获取本周一
     const currentMonday = new Date(today);
     const dayOfWeek = today.getDay() === 0 ? 6 : today.getDay() - 1;
     currentMonday.setDate(today.getDate() - dayOfWeek);
 
+    // 【升级点】：支持一天多条记录，按数组存储
     const dailyLog = {};
-    history.value.forEach(entry => { dailyLog[entry.date] = entry.name });
+    history.value.forEach(entry => { 
+      if (!dailyLog[entry.date]) dailyLog[entry.date] = [];
+      dailyLog[entry.date].push(entry.name);
+    });
 
     return items.map(item => {
-      let w = item.weight;
+      let w = Number(item.weight);
       
-      // 如果是群组，递归计算其子项的权重，但群组本身的权重也可以根据规则变化
       if (item.isGroup && item.children) {
         item.children = calculateDynamicWeights(item.children);
       }
@@ -30,27 +31,34 @@ export function useWheelAlgorithm() {
       // 1. 奖励机制
       let absentDays = true;
       for(let i = 1; i <= rules.value.rewardThreshold; i++) {
-        const d = new Date(today);
-        d.setDate(d.getDate() - i);
-        const dStr = d.toISOString().split('T')[0];
-        if (dailyLog[dStr] === item.name) { absentDays = false; break; }
+        const dStr = new Date(today.getTime() - i * 86400000).toISOString().split('T')[0];
+        if (dailyLog[dStr] && dailyLog[dStr].includes(item.name)) { 
+          absentDays = false; 
+          break; 
+        }
       }
       if (absentDays && Object.keys(dailyLog).length > 0) w *= rules.value.rewardRate;
 
-      // 2. 衰减惩罚 (本周)
+      // 2. 衰减惩罚 (本周吃过几次就惩罚几次，支持一日多餐)
       let occurrencesThisWeek = 0;
       let curr = new Date(currentMonday);
       while(curr <= today) {
-        if (dailyLog[curr.toISOString().split('T')[0]] === item.name) occurrencesThisWeek++;
+        const dStr = curr.toISOString().split('T')[0];
+        if (dailyLog[dStr]) {
+          occurrencesThisWeek += dailyLog[dStr].filter(name => name === item.name).length;
+        }
         curr.setDate(curr.getDate() + 1);
       }
       if (occurrencesThisWeek > 0) w *= Math.pow(rules.value.punishRate, occurrencesThisWeek);
 
-      // 3. 连续防爆肝机制
-      const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
-      const dayBefore = new Date(today); dayBefore.setDate(dayBefore.getDate() - 2);
-      if (dailyLog[yesterday.toISOString().split('T')[0]] === item.name && 
-          dailyLog[dayBefore.toISOString().split('T')[0]] === item.name) {
+      // 3. 连续天数防爆肝
+      const yesterdayStr = new Date(today.getTime() - 86400000).toISOString().split('T')[0];
+      const dayBeforeStr = new Date(today.getTime() - 86400000 * 2).toISOString().split('T')[0];
+      
+      const eatenYesterday = dailyLog[yesterdayStr] && dailyLog[yesterdayStr].includes(item.name);
+      const eatenDayBefore = dailyLog[dayBeforeStr] && dailyLog[dayBeforeStr].includes(item.name);
+      
+      if (eatenYesterday && eatenDayBefore && rules.value.banConsecutiveDays <= 2) {
         w = 0;
       }
 
@@ -59,9 +67,19 @@ export function useWheelAlgorithm() {
   };
 
   const saveHistory = (selectedName) => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    history.value = history.value.filter(entry => entry.date !== todayStr);
-    history.value.push({ date: todayStr, name: selectedName });
+    const now = new Date();
+    // 补齐两位数的时间格式
+    const pad = (n) => n.toString().padStart(2, '0');
+    const dateStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+    const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    
+    // 【升级点】：不再覆盖今日记录，直接追加，并生成唯一ID
+    history.value.push({ 
+      id: Date.now(),
+      date: dateStr, 
+      datetime: `${dateStr}  ${timeStr}`, // 增加了一点点距离
+      name: selectedName 
+    });
     localStorage.setItem('food_history', JSON.stringify(history.value));
   };
 
