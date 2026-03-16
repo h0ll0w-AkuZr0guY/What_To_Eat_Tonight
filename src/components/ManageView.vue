@@ -2,58 +2,66 @@
   <div class="manage-container">
     
     <div class="rules-card">
-      <div class="rules-header">
-        <h3>🧠 动态权重算法配置</h3>
-        <button class="help-btn" @click="showRulesHelp = !showRulesHelp">❓ 规则说明</button>
+      <div class="collapse-header" @click="isRulesCollapsed = !isRulesCollapsed">
+        <h3 class="header-title">🧠 动态权重算法配置</h3>
+        <span class="collapse-icon">{{ isRulesCollapsed ? '▼ 展开' : '▲ 收起' }}</span>
       </div>
       
-      <div class="rules-help" v-if="showRulesHelp">
-        <p><b>连吃惩罚：</b>本周吃过一次，选中概率将乘以该系数。越小惩罚越狠。</p>
-        <p><b>未吃奖励：</b>连续设定天数未吃，权重将被乘以该系数拔高。</p>
-        <p><b>拉黑阈值：</b>连续吃满该天数，今天将被直接踢出转盘(权重强制为0)。</p>
-      </div>
+      <div v-show="!isRulesCollapsed" class="collapse-content">
+        <div class="rules-help">
+          <p><b>连吃惩罚：</b>本周吃过一次，选中概率将乘以该系数。越小惩罚越狠。</p>
+          <p><b>未吃奖励：</b>连续设定天数未吃，权重将被乘以该系数拔高。</p>
+          <p><b>拉黑阈值：</b>连续吃满该天数，今天将被直接踢出转盘(权重强制为0)。</p>
+        </div>
 
-      <div class="rules-grid">
-        <label>连吃惩罚系数<input type="number" step="0.1" v-model.number="tempRules.punishRate" class="form-input"></label>
-        <label>未吃奖励系数<input type="number" step="0.1" v-model.number="tempRules.rewardRate" class="form-input"></label>
-        <label>奖励触发(天)<input type="number" v-model.number="tempRules.rewardThreshold" class="form-input"></label>
-        <label>拉黑阈值(天)<input type="number" v-model.number="tempRules.banConsecutiveDays" class="form-input"></label>
+        <div class="rules-grid">
+          <label>连吃惩罚系数<input type="number" step="0.1" v-model.number="tempRules.punishRate" class="form-input"></label>
+          <label>未吃奖励系数<input type="number" step="0.1" v-model.number="tempRules.rewardRate" class="form-input"></label>
+          <label>奖励触发(天)<input type="number" v-model.number="tempRules.rewardThreshold" class="form-input"></label>
+          <label>拉黑阈值(天)<input type="number" v-model.number="tempRules.banConsecutiveDays" class="form-input"></label>
+        </div>
+        <button class="action-btn save-rules-btn" @click="saveRules(tempRules); alert('算法参数已更新！')">💾 保存规则</button>
       </div>
-      <button class="action-btn save-rules-btn" @click="saveRules(tempRules); alert('算法参数已更新！')">💾 保存规则</button>
     </div>
 
     <hr class="divider">
 
-    <div class="manage-header">
-      <h2>⚙️ 食谱数据池</h2>
-      <div class="top-actions">
-        <button class="action-btn add-btn" @click="openModal()">➕ 新增内容</button>
-        <div class="io-group">
-          <ImportData @data-parsed="handleImportedData" />
-          <button class="action-btn export-btn" @click="exportData">📥 导出配置</button>
-        </div>
+    <div class="food-pool-card">
+      <div class="collapse-header" @click="isFoodCollapsed = !isFoodCollapsed">
+        <h2 class="header-title">⚙️ 食谱数据池 ({{ allFoods.length }})</h2>
+        <span class="collapse-icon">{{ isFoodCollapsed ? '▼ 展开' : '▲ 收起' }}</span>
       </div>
-    </div>
 
-    <div class="food-grid">
-      <div v-for="(food, index) in sortedFoods" :key="food.id" class="food-card" :class="{'is-group-card': food.isGroup}">
-        <div class="food-info">
-          <h3 class="food-name">
-            {{ food.name }} 
-            <span v-if="food.isGroup" class="group-badge">🗂️ 层级组</span>
-          </h3>
-          <p class="food-weight">权重: {{ food.weight }}</p>
-          
-          <div v-if="!food.isGroup" class="food-tags">
-            <span v-for="tag in food.tags" :key="tag" class="tag">{{ tag }}</span>
-          </div>
-          <div v-else class="child-count">
-            包含 {{ food.childIds ? food.childIds.length : 0 }} 个子项
+      <div v-show="!isFoodCollapsed" class="collapse-content">
+        <div class="top-actions" @click.stop>
+          <button class="action-btn add-btn" @click="openModal()">➕ 新增内容</button>
+          <div class="io-group">
+            <ImportData @data-parsed="handleImportedData" />
+            <button class="action-btn export-btn" @click="exportData">📥 导出配置</button>
           </div>
         </div>
-        <div class="card-actions">
-          <button class="small-btn edit" @click="openModal(food)">✏️</button>
-          <button class="small-btn delete" @click="deleteFood(food.id)">🗑️</button>
+
+        <div class="food-grid">
+          <div v-for="(food, index) in sortedFoods" :key="food.id" class="food-card" :class="{'is-group-card': food.isGroup}">
+            <div class="food-info">
+              <h3 class="food-name">
+                {{ food.name }} 
+                <span v-if="food.isGroup" class="group-badge">🗂️ 层级组</span>
+              </h3>
+              <p class="food-weight">权重: {{ food.weight }}</p>
+              
+              <div v-if="!food.isGroup" class="food-tags">
+                <span v-for="tag in food.tags" :key="tag" class="tag">{{ tag }}</span>
+              </div>
+              <div v-else class="child-count">
+                包含 {{ food.childIds ? food.childIds.length : 0 }} 个子项
+              </div>
+            </div>
+            <div class="card-actions">
+              <button class="small-btn edit" @click="openModal(food)">✏️</button>
+              <button class="small-btn delete" @click="deleteFood(food.id)">🗑️</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -68,7 +76,7 @@
         </div>
 
         <div class="form-group">
-          <label>权重 ({{ formData.weight }}分)：</label>
+          <label>初始基础权重 ({{ formData.weight }}分)：</label>
           <input type="range" min="1" max="100" v-model.number="formData.weight" class="slider-input">
         </div>
 
@@ -119,17 +127,16 @@ import ImportData from './ImportData.vue';
 const { allFoods, saveFoods, saveRules, allAvailableTags, exportData } = useFoodConfig();
 const { rules } = useWheelAlgorithm();
 
-// --- 算法配置逻辑 ---
-const tempRules = reactive({ ...rules.value });
-const showRulesHelp = ref(false);
+// 🌟 折叠控制状态
+const isRulesCollapsed = ref(true); // 默认折叠算法配置
+const isFoodCollapsed = ref(false); // 默认展开食谱池
 
-// --- 扁平列表与排序 ---
-// 【升级点】：层级置顶，其余最新在上面
+const tempRules = reactive({ ...rules.value });
+
 const sortedFoods = computed(() => {
   return [...allFoods.value].sort((a, b) => {
     if (a.isGroup && !b.isGroup) return -1;
     if (!a.isGroup && b.isGroup) return 1;
-    // 解析时间戳确保最新的排在前面
     const timeA = parseInt(a.id.split('_')[1] || 0);
     const timeB = parseInt(b.id.split('_')[1] || 0);
     return timeB - timeA;
@@ -138,7 +145,6 @@ const sortedFoods = computed(() => {
 
 const nonGroupFoods = computed(() => allFoods.value.filter(f => !f.isGroup));
 
-// --- 表单与弹窗状态 ---
 const showModal = ref(false);
 const isEditing = ref(false);
 const newTagInput = ref("");
@@ -159,16 +165,14 @@ const openModal = (food = null) => {
   showModal.value = true;
 };
 
-// ... 此处省略标签切换 (toggleTag/addNewTag) 的重复代码，逻辑与之前一致...
 const toggleTag = (t) => { const i = formData.tags.indexOf(t); i > -1 ? formData.tags.splice(i, 1) : formData.tags.push(t); };
 const addNewTag = () => { const t = newTagInput.value.trim(); if (t && !formData.tags.includes(t)) formData.tags.push(t); newTagInput.value = ""; };
 
 const saveForm = () => {
   if (!formData.name.trim()) return alert("名称不能为空！");
   const foodsCopy = [...allFoods.value];
-  
-  if (formData.isGroup) formData.tags = []; // 如果是组，清空标签
-  else formData.childIds = []; // 如果是独立项，清空子项引用
+  if (formData.isGroup) formData.tags = [];
+  else formData.childIds = [];
 
   if (isEditing.value) {
     const idx = foodsCopy.findIndex(f => f.id === formData.id);
@@ -181,9 +185,7 @@ const saveForm = () => {
 };
 
 const deleteFood = (id) => {
-  if (confirm("确定要删除这项内容吗？")) {
-    saveFoods(allFoods.value.filter(f => f.id !== id));
-  }
+  if (confirm("确定要删除这项内容吗？")) saveFoods(allFoods.value.filter(f => f.id !== id));
 };
 
 const handleImportedData = (data) => {
@@ -194,35 +196,44 @@ const handleImportedData = (data) => {
 </script>
 
 <style scoped>
-/* 延续基础样式 */
 .manage-container { width: 100%; }
-.manage-header { display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px; }
-.top-actions { display: flex; flex-direction: column; gap: 10px; }
-.io-group { display: flex; gap: 10px; width: 100%; }
-.io-group > * { flex: 1; }
-@media (min-width: 600px) { .manage-header { flex-direction: row; justify-content: space-between; align-items: center; } .top-actions { flex-direction: row; width: auto; } .io-group { width: auto; } }
 
-.action-btn { padding: 10px 16px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; text-align: center; }
-.add-btn { background: #4CAF50; color: white; width: 100%; }
-.export-btn { background: #607d8b; color: white; width: 100%; }
+/* 🌟 折叠面板通用样式 */
+.collapse-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 15px; background: #fafafa; border-radius: 8px; cursor: pointer;
+  transition: background 0.2s; user-select: none;
+}
+.collapse-header:hover { background: #f0f0f0; }
+.header-title { margin: 0; font-size: 16px; color: #333; }
+.collapse-icon { font-size: 12px; color: #888; font-weight: bold; }
+.collapse-content { padding-top: 15px; animation: fadeIn 0.3s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
-/* 算法规则面板 */
-.rules-card { background: white; padding: 15px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-.rules-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.rules-header h3 { margin: 0; font-size: 16px; color: #FF5722; }
-.help-btn { background: #e3f2fd; color: #1976d2; border: none; padding: 4px 8px; border-radius: 12px; font-size: 12px; cursor: pointer; }
-.rules-help { background: #f9f9f9; padding: 10px; border-radius: 8px; font-size: 12px; color: #666; margin-bottom: 15px; }
+/* 卡片模块 */
+.rules-card, .food-pool-card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.divider { border: 0; height: 1px; background: #ddd; margin: 20px 0; }
+
+.rules-help { background: #fff3e0; padding: 10px; border-radius: 8px; font-size: 12px; color: #e65100; margin-bottom: 15px; }
 .rules-help p { margin: 4px 0; }
 .rules-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 15px;}
 .rules-grid label { font-size: 12px; font-weight: bold; color: #555; }
 .save-rules-btn { background: #FF9800; color: white; width: 100%; }
-.divider { border: 0; height: 1px; background: #ddd; margin: 25px 0; }
+
+.top-actions { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; }
+.io-group { display: flex; gap: 10px; width: 100%; }
+.io-group > * { flex: 1; }
+@media (min-width: 600px) { .top-actions { flex-direction: row; justify-content: space-between; } .io-group { width: auto; } }
+
+.action-btn { padding: 10px 16px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; text-align: center; }
+.add-btn { background: #4CAF50; color: white; width: 100%; max-width: 200px;}
+.export-btn { background: #607d8b; color: white; width: 100%; }
 
 /* 列表展示区 */
 .food-grid { display: grid; gap: 15px; grid-template-columns: 1fr; }
 @media (min-width: 600px) { .food-grid { grid-template-columns: repeat(2, 1fr); } }
-.food-card { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); display: flex; justify-content: space-between; border-left: 4px solid #4CAF50; }
-.is-group-card { border-left-color: #2196F3; background-color: #f8fbff; } /* 组视觉强化 */
+.food-card { background: white; padding: 15px; border-radius: 10px; border: 1px solid #eee; display: flex; justify-content: space-between; border-left: 4px solid #4CAF50; }
+.is-group-card { border-left-color: #2196F3; background-color: #f8fbff; } 
 .food-name { margin: 0 0 8px 0; font-size: 16px; display: flex; align-items: center; flex-wrap: wrap; gap: 5px;}
 .group-badge { background: #1976d2; color: white; font-size: 10px; padding: 3px 6px; border-radius: 4px; }
 .child-count { font-size: 12px; color: #1976d2; font-weight: bold; }
@@ -234,7 +245,7 @@ const handleImportedData = (data) => {
 .edit { background: #e3f2fd; }
 .delete { background: #ffebee; }
 
-/* 表单模态框 (包含新的子项选取) */
+/* 表单模态框 */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
 .modal-content { background: white; padding: 20px; border-radius: 12px; width: 100%; max-width: 450px; max-height: 90vh; overflow-y: auto; }
 .form-group { margin-bottom: 18px; }
@@ -244,7 +255,6 @@ const handleImportedData = (data) => {
 .type-switch { background: #fff3e0; padding: 10px; border-radius: 8px; }
 .toggle-label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 
-/* 选取子项的滚动容器 */
 .child-picker { background: #f9f9f9; padding: 10px; border-radius: 8px; max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; border: 1px solid #eee; }
 .child-label { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
 
