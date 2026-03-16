@@ -3,6 +3,10 @@
     <div class="header">
       <h2>📝 干饭时间线</h2>
       <p class="subtitle">长按卡片可以进行修改或删除</p>
+      
+      <button v-if="sortedHistory.length > 0" class="clear-all-btn" @click="clearAllHistory">
+        🗑️ 一键清空所有记录
+      </button>
     </div>
 
     <div class="timeline">
@@ -44,16 +48,21 @@ import { useWheelAlgorithm } from '../composables/useWheelAlgorithm';
 
 const { history } = useWheelAlgorithm();
 
-// 最新添加的在最上面
 const sortedHistory = computed(() => {
   return [...history.value].reverse();
 });
 
-// 颜色渐变：越新的记录颜色越深 (鲜活)，越老越淡
 const getCardColor = (index, total) => {
-  // 基础颜色: RGB(76, 175, 80) 绿
   const opacity = Math.max(0.15, 1 - (index / Math.min(total, 30))); 
   return `rgba(76, 175, 80, ${opacity})`;
+};
+
+// --- 新增：一键清空逻辑 ---
+const clearAllHistory = () => {
+  if (confirm("🚨 警告：确定要清空所有干饭记录吗？此操作不可恢复！")) {
+    history.value = [];
+    localStorage.setItem('food_history', JSON.stringify([]));
+  }
 };
 
 // --- 长按交互逻辑 ---
@@ -63,7 +72,7 @@ const activeEntry = ref(null);
 const startPress = (entry) => {
   pressTimer = setTimeout(() => {
     activeEntry.value = entry;
-  }, 600); // 长按 600ms 触发
+  }, 600); 
 };
 
 const cancelPress = () => {
@@ -84,7 +93,10 @@ const editRecord = () => {
   if (newName && newName.trim() !== "") {
     const entryIndex = history.value.findIndex(e => e.id === activeEntry.value.id);
     if (entryIndex > -1) {
-      history.value[entryIndex].name = newName.trim();
+      // 创建新对象以触发 Vue 的响应式更新
+      const newHistory = [...history.value];
+      newHistory[entryIndex].name = newName.trim();
+      history.value = newHistory;
       localStorage.setItem('food_history', JSON.stringify(history.value));
     }
   }
@@ -95,7 +107,22 @@ const editRecord = () => {
 <style scoped>
 .history-container { width: 100%; max-width: 600px; margin: 0 auto; }
 .header { text-align: center; margin-bottom: 20px; }
-.subtitle { font-size: 12px; color: #888; }
+.subtitle { font-size: 12px; color: #888; margin-bottom: 15px; }
+
+/* 一键清空按钮样式 */
+.clear-all-btn {
+  background-color: #ffebee;
+  color: #d32f2f;
+  border: 1px solid #ffcdd2;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 10px;
+}
+.clear-all-btn:active { transform: scale(0.95); background-color: #ffcdd2; }
 
 .timeline { display: flex; flex-direction: column; gap: 12px; }
 .history-card { 
@@ -103,7 +130,7 @@ const editRecord = () => {
   padding: 16px 20px; border-radius: 12px;
   color: #333; font-weight: bold; cursor: pointer;
   box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-  user-select: none; /* 防止长按选中文本 */
+  user-select: none; 
   -webkit-user-select: none;
   transition: transform 0.2s;
 }
@@ -113,7 +140,6 @@ const editRecord = () => {
 
 .empty-state { text-align: center; color: #aaa; padding: 40px; }
 
-/* 模态框样式 */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: flex-end; justify-content: center; z-index: 1000; padding-bottom: 20px;}
 .action-menu { background: white; width: 90%; max-width: 400px; border-radius: 16px; overflow: hidden; animation: slideUp 0.3s ease; }
 .menu-title { text-align: center; padding: 15px; margin: 0; color: #666; font-size: 14px; border-bottom: 1px solid #eee; }

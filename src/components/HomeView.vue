@@ -47,12 +47,19 @@ import { useFoodConfig } from '../composables/useFoodConfig';
 import { useWheelAlgorithm } from '../composables/useWheelAlgorithm';
 
 const { allFoods, allAvailableTags } = useFoodConfig();
-const { history, calculateDynamicWeights, saveHistory } = useWheelAlgorithm(); // 引入 history
+const { history, rules, calculateDynamicWeights, saveHistory } = useWheelAlgorithm();
 
 const isSpinning = ref(false);
 const statusText = ref("点击下方按钮，把决定权交给命运");
 const finalChoice = ref("");
-const selectedTags = ref([]);
+
+// 🌟 读取缓存的标签，实现持久化
+const selectedTags = ref(JSON.parse(localStorage.getItem('selected_tags')) || []);
+
+// 🌟 监听标签选择并存入本地
+watch(selectedTags, (newTags) => {
+  localStorage.setItem('selected_tags', JSON.stringify(newTags));
+}, { deep: true });
 
 const rootFoods = computed(() => {
   const allChildIds = new Set();
@@ -93,10 +100,9 @@ const allTags = allAvailableTags;
 const wheelStack = ref([]);
 const currentGroupName = ref("");
 
-// 🌟 核心升级：同时监听 filteredFoods 和 history！只要你记录了日志，转盘数值瞬间计算并刷新！
-watch([filteredFoods, history], ([newFoods]) => {
+watch([filteredFoods, history, rules], ([newFoods]) => {
   wheelStack.value = [calculateDynamicWeights(newFoods)];
-  currentGroupName.value = ""; // 记录完后自动重置回主转盘
+  currentGroupName.value = ""; 
 }, { immediate: true, deep: true });
 
 const currentWheelItems = computed(() => wheelStack.value[wheelStack.value.length - 1] || []);
@@ -124,12 +130,11 @@ const handleSpinEnd = (winner) => {
 const confirmChoice = () => {
   saveHistory(finalChoice.value);
   statusText.value = "已记录！权重已实时更新。";
-  finalChoice.value = ""; // 记录完毕后清空输入框
+  finalChoice.value = ""; 
 };
 </script>
 
 <style scoped>
-/* 保持原本样式不变 */
 .home-container { width: 100%; }
 .layout-container { display: flex; flex-direction: column; gap: 20px; }
 @media (min-width: 768px) { .layout-container { flex-direction: row; align-items: flex-start; } .wheel-section { flex: 3; } .log-section { flex: 2; position: sticky; top: 20px; } }

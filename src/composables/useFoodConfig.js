@@ -1,22 +1,35 @@
-// src/composables/useFoodConfig.js
 import { ref, computed } from 'vue';
 import { DEFAULT_FOODS, DEFAULT_RULES } from '../default-data';
 
-const allFoods = ref(JSON.parse(localStorage.getItem('food_config')) || DEFAULT_FOODS);
-const rules = ref(JSON.parse(localStorage.getItem('wheel_rules')) || DEFAULT_RULES);
+// 平滑兼容你之前的“按天数”设置，自动映射为“按顿数”
+const loadRules = () => {
+  const stored = JSON.parse(localStorage.getItem('wheel_rules'));
+  if (!stored) return DEFAULT_RULES;
+
+  return {
+    cycleMeals: stored.cycleMeals ?? 10,
+    banMaxMeals: stored.banMaxMeals ?? stored.banConsecutiveDays ?? 2,
+    punishRate: stored.punishRate ?? 0.5,
+    rewardMeals: stored.rewardMeals ?? stored.rewardThreshold ?? 7,
+    rewardRate: stored.rewardRate ?? 1.5
+  };
+};
+
+export const globalFoods = ref(JSON.parse(localStorage.getItem('food_config')) || DEFAULT_FOODS);
+export const globalRules = ref(loadRules());
+export const globalHistory = ref(JSON.parse(localStorage.getItem('food_history')) || []);
 
 export function useFoodConfig() {
   const saveFoods = (newFoods) => {
-    allFoods.value = newFoods;
-    localStorage.setItem('food_config', JSON.stringify(allFoods.value));
+    globalFoods.value = [...newFoods];
+    localStorage.setItem('food_config', JSON.stringify(globalFoods.value));
   };
 
   const saveRules = (newRules) => {
-    rules.value = newRules;
-    localStorage.setItem('wheel_rules', JSON.stringify(rules.value));
+    globalRules.value = { ...newRules };
+    localStorage.setItem('wheel_rules', JSON.stringify(globalRules.value));
   };
 
-  // 提取当前所有存在的标签（去重），用于管理界面的快速选择和首页的过滤
   const allAvailableTags = computed(() => {
     const tags = new Set();
     const extractTags = (items) => {
@@ -25,13 +38,12 @@ export function useFoodConfig() {
         if (item.children) extractTags(item.children);
       });
     };
-    extractTags(allFoods.value);
+    extractTags(globalFoods.value);
     return Array.from(tags);
   });
 
-  // 导出配置
   const exportData = () => {
-    const data = { foods: allFoods.value, rules: rules.value };
+    const data = { foods: globalFoods.value, rules: globalRules.value };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -44,8 +56,8 @@ export function useFoodConfig() {
   };
 
   return { 
-    allFoods, 
-    rules, 
+    allFoods: globalFoods, 
+    rules: globalRules, 
     saveFoods, 
     saveRules, 
     allAvailableTags, 
