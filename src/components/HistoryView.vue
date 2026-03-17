@@ -2,7 +2,10 @@
   <div class="history-container">
     <div class="header">
       <h2>📝 干饭时间线</h2>
-      <p class="subtitle">长按卡片可以进行修改或删除</p>
+      <div class="subtitle-row">
+        <p class="subtitle">长按卡片可以进行修改或删除</p>
+        <button class="clear-all-btn" v-if="sortedHistory.length > 0" @click="showClearAllModal = true">🗑️ 一键清空</button>
+      </div>
     </div>
 
     <div class="timeline">
@@ -14,7 +17,7 @@
       </div>
     </div>
 
-    <div class="modal-overlay" v-if="activeEntry && !showEditModal && !showDeleteModal" @click.self="activeEntry = null">
+    <div class="modal-overlay" v-if="activeEntry && !showEditModal && !showDeleteModal && !showClearAllModal" @click.self="activeEntry = null">
       <div class="action-menu">
         <p class="menu-title">操作: {{ activeEntry.name }}</p>
         <button class="menu-btn edit" @click="showEditModal = true">✏️ 修改内容</button>
@@ -44,11 +47,22 @@
         </div>
       </div>
     </div>
+
+    <div class="modal-overlay centered" v-if="showClearAllModal" @click.self="closeModals">
+      <div class="nice-modal">
+        <h3>🗑️ 清空所有记录</h3>
+        <p>确定要清空<b>所有的干饭历史</b>吗？<br>此操作无法恢复，且会重置算法周期惩罚。</p>
+        <div class="modal-footer">
+          <button class="cancel-btn" @click="closeModals">取消</button>
+          <button class="danger-btn" @click="confirmClearAll">全部清空</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed } from 'vue';
 import { useWheelAlgorithm } from '../composables/useWheelAlgorithm';
 
 const { history } = useWheelAlgorithm();
@@ -59,11 +73,12 @@ let pressTimer = null;
 const activeEntry = ref(null);
 const showEditModal = ref(false);
 const showDeleteModal = ref(false);
+const showClearAllModal = ref(false);
 const editInputValue = ref("");
 
 const startPress = (entry) => { pressTimer = setTimeout(() => { activeEntry.value = entry; editInputValue.value = entry.name; }, 500); };
 const cancelPress = () => { if (pressTimer) clearTimeout(pressTimer); };
-const closeModals = () => { showEditModal.value = false; showDeleteModal.value = false; activeEntry.value = null; };
+const closeModals = () => { showEditModal.value = false; showDeleteModal.value = false; showClearAllModal.value = false; activeEntry.value = null; };
 
 const confirmDelete = () => {
   history.value = history.value.filter(e => e.id !== activeEntry.value.id);
@@ -78,23 +93,32 @@ const confirmEdit = () => {
     if (entryIndex > -1) {
       history.value[entryIndex].name = newName;
       localStorage.setItem('food_history', JSON.stringify(history.value));
-      history.value = [...history.value]; // 触发响应式
+      history.value = [...history.value]; 
     }
   }
+  closeModals();
+};
+
+const confirmClearAll = () => {
+  history.value = [];
+  localStorage.setItem('food_history', JSON.stringify(history.value));
   closeModals();
 };
 </script>
 
 <style scoped>
 .history-container { width: 100%; max-width: 600px; margin: 0 auto; }
-.header { text-align: center; margin-bottom: 20px; } .subtitle { font-size: 12px; color: #888; }
+.header { text-align: center; margin-bottom: 20px; } 
+.subtitle-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding: 0 5px; }
+.subtitle { font-size: 12px; color: #888; margin: 0; }
+.clear-all-btn { background: #ffebee; color: #F44336; border: none; padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; cursor: pointer; }
+
 .timeline { display: flex; flex-direction: column; gap: 12px; }
 .history-card { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-radius: 12px; color: #333; font-weight: bold; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.05); user-select: none; -webkit-user-select: none; transition: transform 0.2s; }
 .history-card:active { transform: scale(0.98); }
 .time { font-family: monospace; font-size: 14px; opacity: 0.8; } .name { font-size: 18px; }
 .empty-state { text-align: center; color: #aaa; padding: 40px; }
 
-/* 模态框通用 */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: flex-end; justify-content: center; z-index: 1000; padding-bottom: 20px;}
 .modal-overlay.centered { align-items: center; padding-bottom: 0; }
 .action-menu { background: white; width: 90%; max-width: 400px; border-radius: 16px; overflow: hidden; animation: slideUp 0.3s ease; }
@@ -102,7 +126,6 @@ const confirmEdit = () => {
 .menu-btn { width: 100%; padding: 16px; border: none; border-bottom: 1px solid #eee; background: white; font-size: 16px; font-weight: bold; cursor: pointer; }
 .menu-btn.edit { color: #2196F3; } .menu-btn.delete { color: #F44336; } .menu-btn.cancel { color: #888; border-bottom: none; }
 
-/* 美化版中心弹窗 */
 .nice-modal { background: white; width: 90%; max-width: 350px; padding: 20px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); animation: zoomIn 0.2s ease; }
 .nice-modal h3 { margin-top: 0; margin-bottom: 15px; font-size: 18px; color: #333; }
 .nice-modal p { font-size: 14px; color: #666; margin-bottom: 20px; line-height: 1.5; }
