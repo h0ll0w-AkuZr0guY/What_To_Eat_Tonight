@@ -1,11 +1,9 @@
 import { ref, computed } from 'vue';
 import { DEFAULT_FOODS, DEFAULT_RULES } from '../default-data';
 
-// 平滑兼容你之前的“按天数”设置，自动映射为“按顿数”
 const loadRules = () => {
   const stored = JSON.parse(localStorage.getItem('wheel_rules'));
   if (!stored) return DEFAULT_RULES;
-
   return {
     cycleMeals: stored.cycleMeals ?? 10,
     banMaxMeals: stored.banMaxMeals ?? stored.banConsecutiveDays ?? 2,
@@ -42,25 +40,35 @@ export function useFoodConfig() {
     return Array.from(tags);
   });
 
-  const exportData = () => {
+  // 🌟 核心修复：App端唤起原生分享面板
+  const exportData = async () => {
     const data = { foods: globalFoods.value, rules: globalRules.value };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `food_config_${new Date().toISOString().slice(0,10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const jsonStr = JSON.stringify(data, null, 2);
+    const fileName = `food_config_${new Date().toISOString().slice(0,10)}.json`;
+    const file = new File([jsonStr], fileName, { type: 'application/json' });
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: '薛定谔的饭配置',
+          text: '我的食谱与转盘算法配置',
+          files: [file]
+        });
+      } catch (err) {
+        console.log("分享被取消或失败", err);
+      }
+    } else {
+      // 兼容 PC 网页端
+      const url = URL.createObjectURL(file);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
   };
 
-  return { 
-    allFoods: globalFoods, 
-    rules: globalRules, 
-    saveFoods, 
-    saveRules, 
-    allAvailableTags, 
-    exportData 
-  };
+  return { allFoods: globalFoods, rules: globalRules, saveFoods, saveRules, allAvailableTags, exportData };
 }

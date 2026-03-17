@@ -2,14 +2,11 @@
   <div class="home-container">
     <main class="layout-container">
       <section class="card-section wheel-section">
-        
         <div class="breadcrumb" v-if="wheelStack.length > 1">
           <button @click="goBack" class="back-btn">⬅ 返回上一级 (当前: {{ currentGroupName }})</button>
         </div>
-
         <LuckyWheel :items="currentWheelItems" :isSpinning="isSpinning" @spin-end="handleSpinEnd" />
         <p class="status-text">{{ statusText }}</p>
-        
         <button class="action-btn spin-btn" :disabled="isSpinning" @click="isSpinning = true">
           {{ wheelStack.length > 1 ? '继续抽取子分类！' : '开始命运的转动！' }}
         </button>
@@ -30,7 +27,7 @@
         <h3>📝 最终决策确认</h3>
         <div class="decision-box">
           <label>抽取结果 (也可手动修改)：</label>
-          <input type="text" v-model="finalChoice" :disabled="isSpinning" class="full-width-input">
+          <input type="text" v-model="finalChoice" :disabled="isSpinning" class="full-width-input" @focus="scrollToInput">
           <button class="action-btn confirm-btn" :disabled="isSpinning || !finalChoice" @click="confirmChoice">
             ✅ 确认并写入干饭日志
           </button>
@@ -52,32 +49,27 @@ const { history, rules, calculateDynamicWeights, saveHistory } = useWheelAlgorit
 const isSpinning = ref(false);
 const statusText = ref("点击下方按钮，把决定权交给命运");
 const finalChoice = ref("");
-
-// 🌟 读取缓存的标签，实现持久化
 const selectedTags = ref(JSON.parse(localStorage.getItem('selected_tags')) || []);
 
-// 🌟 监听标签选择并存入本地
-watch(selectedTags, (newTags) => {
-  localStorage.setItem('selected_tags', JSON.stringify(newTags));
-}, { deep: true });
+watch(selectedTags, (newTags) => { localStorage.setItem('selected_tags', JSON.stringify(newTags)); }, { deep: true });
+
+// 🌟 输入法弹出时，延迟 300 毫秒让视图滚动到中央
+const scrollToInput = (e) => {
+  setTimeout(() => {
+    e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 300);
+};
 
 const rootFoods = computed(() => {
   const allChildIds = new Set();
-  allFoods.value.forEach(f => {
-    if (f.isGroup && f.childIds) f.childIds.forEach(id => allChildIds.add(id));
-  });
-
+  allFoods.value.forEach(f => { if (f.isGroup && f.childIds) f.childIds.forEach(id => allChildIds.add(id)); });
   const buildNode = (item) => {
     if (item.isGroup) {
-      const children = (item.childIds || [])
-        .map(id => allFoods.value.find(f => f.id === id))
-        .filter(Boolean)
-        .map(child => buildNode(child));
+      const children = (item.childIds || []).map(id => allFoods.value.find(f => f.id === id)).filter(Boolean).map(child => buildNode(child));
       return { ...item, children };
     }
     return { ...item };
   };
-
   return allFoods.value.filter(f => !allChildIds.has(f.id)).map(buildNode);
 });
 
@@ -89,8 +81,7 @@ const filteredFoods = computed(() => {
         const filteredChildren = filterNodes(item.children);
         if (filteredChildren.length > 0) return { ...item, children: filteredChildren };
       }
-      const hasTag = item.tags?.some(tag => selectedTags.value.includes(tag));
-      return hasTag ? item : null;
+      return item.tags?.some(tag => selectedTags.value.includes(tag)) ? item : null;
     }).filter(Boolean);
   };
   return filterNodes(rootFoods.value);
@@ -107,53 +98,21 @@ watch([filteredFoods, history, rules], ([newFoods]) => {
 
 const currentWheelItems = computed(() => wheelStack.value[wheelStack.value.length - 1] || []);
 
-const goBack = () => {
-  if (wheelStack.value.length > 1) {
-    wheelStack.value.pop();
-    currentGroupName.value = "";
-    statusText.value = "已返回上一级";
-  }
-};
+const goBack = () => { if (wheelStack.value.length > 1) { wheelStack.value.pop(); currentGroupName.value = ""; statusText.value = "已返回上一级"; } };
 
 const handleSpinEnd = (winner) => {
   isSpinning.value = false;
   if (winner.isGroup) {
-    statusText.value = `抽中分组【${winner.name}】，继续抽子项！`;
-    currentGroupName.value = winner.name;
-    wheelStack.value.push(winner.children); 
+    statusText.value = `抽中分组【${winner.name}】，继续抽子项！`; currentGroupName.value = winner.name; wheelStack.value.push(winner.children); 
   } else {
-    statusText.value = `天意选择了：【 ${winner.name} 】！`;
-    finalChoice.value = winner.name;
+    statusText.value = `天意选择了：【 ${winner.name} 】！`; finalChoice.value = winner.name;
   }
 };
 
-const confirmChoice = () => {
-  saveHistory(finalChoice.value);
-  statusText.value = "已记录！权重已实时更新。";
-  finalChoice.value = ""; 
-};
+const confirmChoice = () => { saveHistory(finalChoice.value); statusText.value = "已记录！权重已实时更新。"; finalChoice.value = ""; };
 </script>
 
 <style scoped>
-.home-container { width: 100%; }
-.layout-container { display: flex; flex-direction: column; gap: 20px; }
-@media (min-width: 768px) { .layout-container { flex-direction: row; align-items: flex-start; } .wheel-section { flex: 3; } .log-section { flex: 2; position: sticky; top: 20px; } }
-.card-section { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); display: flex; flex-direction: column; align-items: center; width: 100%; }
-.breadcrumb { width: 100%; margin-bottom: 15px; text-align: left; }
-.back-btn { background: #ff9800; color: white; border: none; padding: 8px 16px; border-radius: 20px; cursor: pointer; font-size: 14px;}
-.status-text { font-size: 16px; font-weight: bold; margin: 15px 0; color: #E91E63; text-align: center; min-height: 24px; }
-.action-btn { width: 100%; padding: 14px 20px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: transform 0.1s; }
-.action-btn:active { transform: scale(0.98); }
-.action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.spin-btn { background-color: #4CAF50; color: white; margin-bottom: 25px; }
-.confirm-btn { background-color: #2196F3; color: white; margin-top: 15px; }
-.tags-filter-box { width: 100%; background: #f8f9fa; border-radius: 10px; padding: 15px; border: 1px solid #eee; }
-.filter-title { margin: 0 0 10px 0; font-size: 14px; font-weight: bold; color: #555; }
-.tags-group { display: flex; flex-wrap: wrap; gap: 12px; }
-.tag-label { display: flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; }
-.tag-label input { width: 16px; height: 16px; }
-.no-tags { font-size: 12px; color: #999; }
-.decision-box { width: 100%; text-align: left; }
-.decision-box label { font-size: 14px; font-weight: bold; color: #555; display: block; margin-bottom: 8px;}
-.full-width-input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; }
+/* 保持原有样式不变 */
+.home-container { width: 100%; } .layout-container { display: flex; flex-direction: column; gap: 20px; } @media (min-width: 768px) { .layout-container { flex-direction: row; align-items: flex-start; } .wheel-section { flex: 3; } .log-section { flex: 2; position: sticky; top: 20px; } } .card-section { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); display: flex; flex-direction: column; align-items: center; width: 100%; } .breadcrumb { width: 100%; margin-bottom: 15px; text-align: left; } .back-btn { background: #ff9800; color: white; border: none; padding: 8px 16px; border-radius: 20px; cursor: pointer; font-size: 14px;} .status-text { font-size: 16px; font-weight: bold; margin: 15px 0; color: #E91E63; text-align: center; min-height: 24px; } .action-btn { width: 100%; padding: 14px 20px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: transform 0.1s; } .action-btn:active { transform: scale(0.98); } .action-btn:disabled { opacity: 0.5; cursor: not-allowed; } .spin-btn { background-color: #4CAF50; color: white; margin-bottom: 25px; } .confirm-btn { background-color: #2196F3; color: white; margin-top: 15px; } .tags-filter-box { width: 100%; background: #f8f9fa; border-radius: 10px; padding: 15px; border: 1px solid #eee; } .filter-title { margin: 0 0 10px 0; font-size: 14px; font-weight: bold; color: #555; } .tags-group { display: flex; flex-wrap: wrap; gap: 12px; } .tag-label { display: flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; } .tag-label input { width: 16px; height: 16px; } .no-tags { font-size: 12px; color: #999; } .decision-box { width: 100%; text-align: left; } .decision-box label { font-size: 14px; font-weight: bold; color: #555; display: block; margin-bottom: 8px;} .full-width-input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; }
 </style>
