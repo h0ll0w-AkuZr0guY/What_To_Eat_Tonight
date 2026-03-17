@@ -109,7 +109,7 @@
           directory: Directory.Documents,
           encoding: Encoding.UTF8
         });
-        showToast(`✅ 已成功保存到手机的 [ 文档 / Documents ] 目录！`);
+        showToast(`✅ 已成功保存到手机的 [ Documents ] 目录！`);
       } catch (e) {
         showToast(`❌ 导出失败，请检查存储权限：${e.message}`);
       }

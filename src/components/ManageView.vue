@@ -2,28 +2,28 @@
   <div class="manage-container">
     
     <details class="modern-details">
-      <summary>🧠 动态权重算法配置</summary>
+      <summary>🧠 天下美食法则</summary>
       <div class="details-content">
         <div class="rules-help">
-          <p><b>⏱️ 周期管理：</b>仅参考最近 <b>{{ tempRules.cycleMeals }}</b> 顿记录，超出既往不咎。</p>
-          <p><b>🚫 拉黑阈值：</b>周期内吃满该顿数，直接踢出转盘(权重变0)。</p>
-          <p><b>📉 连吃惩罚：</b>周期内每吃一顿，中签概率就乘此系数，越小惩罚越狠。</p>
-          <p><b>🎁 未吃奖励：</b>连续若干顿未抽中，权重将乘此系数拔高。</p>
+          <p><b>⏱️ 周期管理：</b><b>{{ tempRules.cycleMeals }}</b> 顿为一个周期，超出既往不咎。</p>
+          <p><b>🚫 防止吃腻：</b>周期内吃满该顿数，本周期不许吃啦。</p>
+          <p><b>📉 吃点别的：</b>周期内吃到的食物将更难抽到。</p>
+          <p><b>🎁 吃点好的：</b>周期内几顿没吃上的食物将更容易抽到。</p>
         </div>
 
         <div class="rules-grid">
-          <label>1. 周期长度(近几顿)<input type="number" v-model.number="tempRules.cycleMeals" class="form-input"></label>
-          <label>2. 拉黑阈值(限几顿)<input type="number" v-model.number="tempRules.banMaxMeals" class="form-input"></label>
-          <label>3. 连吃惩罚系数<input type="number" step="0.1" v-model.number="tempRules.punishRate" class="form-input"></label>
-          <label>4. 未吃奖励系数<input type="number" step="0.1" v-model.number="tempRules.rewardRate" class="form-input"></label>
-          <label class="full-width">5. 奖励触发要求 (连续几顿没吃)<input type="number" v-model.number="tempRules.rewardMeals" class="form-input"></label>
+          <label>周期长度<input type="number" v-model.number="tempRules.cycleMeals" class="form-input"></label>
+          <label>防止吃腻<input type="number" v-model.number="tempRules.banMaxMeals" class="form-input"></label>
+          <label>吃点别的系数<input type="number" step="0.1" v-model.number="tempRules.punishRate" class="form-input"></label>
+          <label>吃点好的系数<input type="number" step="0.1" v-model.number="tempRules.rewardRate" class="form-input"></label>
+          <label class="full-width">吃点好的触发要求（连续几顿没吃）<input type="number" v-model.number="tempRules.rewardMeals" class="form-input"></label>
         </div>
         <button class="action-btn save-rules-btn" @click="handleSaveRules">💾 保存规则</button>
       </div>
     </details>
 
     <details class="modern-details" open>
-      <summary>⚙️ 食谱数据池 ({{ allFoods.length }})</summary>
+      <summary>⚙️ 天下美食录 ({{ allFoods.length }})</summary>
       <div class="details-content">
         
         <div class="sleek-toolbar">
@@ -38,7 +38,7 @@
           <div v-for="(food, index) in sortedFoods" :key="food.id" class="food-card" :class="{'is-group-card': food.isGroup}">
             <div class="food-info">
               <h3 class="food-name">{{ food.name }} <span v-if="food.isGroup" class="group-badge">🗂️ 层级组</span></h3>
-              <p class="food-weight">权重: {{ food.weight }}</p>
+              <p class="food-weight">满意度: {{ food.weight }}</p>
               <div v-if="!food.isGroup" class="food-tags"><span v-for="tag in food.tags" :key="tag" class="tag">{{ tag }}</span></div>
               <div v-else class="child-count">包含 {{ food.childIds ? food.childIds.length : 0 }} 个子项</div>
             </div>
@@ -73,8 +73,8 @@
       <div class="modal-content">
         <h3>{{ isEditing ? '✏️ 编辑内容' : '➕ 新增内容' }}</h3>
         <div class="form-group"><label>名称：</label><input type="text" v-model="formData.name" placeholder="例如：金拱门" class="form-input"></div>
-        <div class="form-group"><label>权重 ({{ formData.weight }}分)：</label><input type="range" min="1" max="100" v-model.number="formData.weight" class="slider-input"></div>
-        <div class="form-group type-switch"><label class="toggle-label"><input type="checkbox" v-model="formData.isGroup"><b>作为多级群组？</b></label></div>
+        <div class="form-group"><label>美食满意度 ({{ formData.weight }}分)：</label><input type="range" min="1" max="100" v-model.number="formData.weight" class="slider-input"></div>
+        <div class="form-group type-switch"><label class="toggle-label"><input type="checkbox" v-model="formData.isGroup"><b>是否作为多级群组？</b></label></div>
 
         <div class="form-group" v-if="formData.isGroup">
           <label>包含的食谱：</label>
@@ -85,12 +85,12 @@
         </div>
 
         <div class="form-group" v-else>
-          <label>标签：</label>
+          <label>美食标签：</label>
           <div class="quick-tags" v-if="displayTags.length > 0">
             <span v-for="tag in displayTags" :key="tag" class="quick-tag" :class="{ selected: formData.tags.includes(tag) }" @click="toggleTag(tag)">{{ tag }}</span>
           </div>
           <div class="add-tag-wrapper">
-            <input type="text" v-model="newTagInput" placeholder="输入回车添加" @keyup.enter="addNewTag" class="form-input small">
+            <input type="text" v-model="newTagInput" placeholder="输入美食标签，例如：粉面" @keyup.enter="addNewTag" class="form-input small">
             <button @click="addNewTag" class="action-btn tag-add-btn">添加</button>
           </div>
         </div>
@@ -120,7 +120,7 @@ const showToast = (msg) => {
 
 const handleSaveRules = () => {
   saveRules(tempRules);
-  showToast('✅ 算法参数已更新，转盘已同步重算！');
+  showToast('✅ 天下规则已悉数变换！风云再起~');
 };
 
 const showSyncModal = ref(false);

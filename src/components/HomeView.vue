@@ -6,30 +6,30 @@
           <button @click="goBack" class="back-btn">⬅ 返回上一级 (当前: {{ currentGroupName }})</button>
         </div>
         <LuckyWheel :items="currentWheelItems" :isSpinning="isSpinning" @spin-end="handleSpinEnd" />
-        <p class="status-text">{{ statusText }}</p>
+        <p class="status-text" :style="{ color: statusColor }">{{ statusText }}</p>
         <button class="action-btn spin-btn" :disabled="isSpinning" @click="isSpinning = true">
           {{ wheelStack.length > 1 ? '继续抽取子分类！' : '开始命运的转动！' }}
         </button>
 
         <div class="tags-filter-box">
-          <p class="filter-title">🏷️ 根据标签过滤美食：</p>
+          <p class="filter-title">🏷️ 想吃点啥：</p>
           <div class="tags-group">
             <label v-for="tag in allTags" :key="tag" class="tag-label">
               <input type="checkbox" :value="tag" v-model="selectedTags" :disabled="isSpinning">
               <span>{{ tag }}</span>
             </label>
-            <div v-if="allTags.length === 0" class="no-tags">当前食谱没有设置标签</div>
+            <div v-if="allTags.length === 0" class="no-tags">当前食谱没有设置美食标签</div>
           </div>
         </div>
       </section>
 
       <section class="card-section log-section">
-        <h3>📝 最终决策确认</h3>
+        <h3>📝 最终决策</h3>
         <div class="decision-box">
-          <label>抽取结果 (也可手动修改)：</label>
+          <label>今天就决定吃你了！！！</label>
           <input type="text" v-model="finalChoice" :disabled="isSpinning" class="full-width-input" @focus="scrollToInput">
           <button class="action-btn confirm-btn" :disabled="isSpinning || !finalChoice" @click="confirmChoice">
-            ✅ 确认并写入干饭日志
+            ✅ 写入干饭日志
           </button>
         </div>
       </section>
@@ -47,7 +47,8 @@ const { allFoods, allAvailableTags } = useFoodConfig();
 const { history, rules, calculateDynamicWeights, saveHistory } = useWheelAlgorithm();
 
 const isSpinning = ref(false);
-const statusText = ref("点击下方按钮，把决定权交给命运");
+const statusText = ref("点击下方按钮，将决定权交给命运");
+const statusColor = ref("#E91E63");
 const finalChoice = ref("");
 const selectedTags = ref(JSON.parse(localStorage.getItem('selected_tags')) || []);
 
@@ -102,10 +103,45 @@ const goBack = () => { if (wheelStack.value.length > 1) { wheelStack.value.pop()
 
 const handleSpinEnd = (winner) => {
   isSpinning.value = false;
+  
   if (winner.isGroup) {
-    statusText.value = `抽中分组【${winner.name}】，继续抽子项！`; currentGroupName.value = winner.name; wheelStack.value.push(winner.children); 
+    statusText.value = `🎯 破开结界，进入【${winner.name}】领域，继续深入！`; 
+    statusColor.value = "#2196F3"; // 分组统一用科技蓝
+    currentGroupName.value = winner.name; 
+    wheelStack.value.push(winner.children); 
   } else {
-    statusText.value = `天意选择了：【 ${winner.name} 】！`; finalChoice.value = winner.name;
+    // 💀 1/1000 概率的隐藏彩蛋：天谴时刻
+    if (Math.random() < 0.001) {
+      statusText.value = `💀 触发 0.1% 隐藏天谴：老天爷觉得你最近吃太多了，今日【 绝对禁止吃 ${winner.name} 】！给我重抽！`;
+      statusColor.value = "#000000"; // 纯黑色警告
+      finalChoice.value = ""; // 清空选择，逼迫用户重抽
+      return; // 直接打断施法
+    }
+
+    // 🤣 随机骚话语录库 (包含 12 种不同的文案和精心配色的马卡龙/鲜艳色调)
+    const funPhrases = [
+      { text: `就决定是你了，去吧！【 ${winner.name} 】！`, color: '#E91E63' }, // 猛男粉
+      { text: `天意难违，老天爷摁着你的头让你吃【 ${winner.name} 】！`, color: '#9C27B0' }, // 基佬紫
+      { text: `犹豫就会败北，果断白给，干饭首选【 ${winner.name} 】！`, color: '#3F51B5' }, // 靛蓝色
+      { text: `懂了，你的胃正在疯狂呼唤【 ${winner.name} 】！`, color: '#009688' }, // 水鸭绿
+      { text: `别纠结了，秦始皇当年扫六合就是为了吃一口【 ${winner.name} 】！`, color: '#D32F2F' }, // 姨妈红
+      { text: `算命老爷爷掐指一算，你今日五行缺【 ${winner.name} 】！`, color: '#795548' }, // 泥土棕
+      { text: `大数据表明，你现在最适合暴风吸入【 ${winner.name} 】！`, color: '#0288D1' }, // 极客蓝
+      { text: `哪怕世界马上毁灭，这顿也必须吃【 ${winner.name} 】！`, color: '#E65100' }, // 亮橙色
+      { text: `让开让开，【 ${winner.name} 】闪亮登场，速速干饭！`, color: '#43A047' }, // 原谅绿
+      { text: `听我的，不吃【 ${winner.name} 】你今天连睡觉都闭不上眼！`, color: '#607D8B' }, // 蓝灰色
+      { text: `抽签结果已出，V我50，这就带你去吃【 ${winner.name} 】！`, color: '#C2185B' }, // 玫瑰红
+      { text: `再看一眼，这就是你命中注定的卡路里【 ${winner.name} 】！`, color: '#000000' }  // 高级黑
+    ];
+
+    // 随机抽取一句骚话
+    const randomIndex = Math.floor(Math.random() * funPhrases.length);
+    const selectedResult = funPhrases[randomIndex];
+
+    // 应用文案、颜色和最终结果
+    statusText.value = selectedResult.text;
+    statusColor.value = selectedResult.color;
+    finalChoice.value = winner.name;
   }
 };
 
