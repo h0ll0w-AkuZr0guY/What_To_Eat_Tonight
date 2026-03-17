@@ -18,7 +18,7 @@
           <label>4. 未吃奖励系数<input type="number" step="0.1" v-model.number="tempRules.rewardRate" class="form-input"></label>
           <label class="full-width">5. 奖励触发要求 (连续几顿没吃)<input type="number" v-model.number="tempRules.rewardMeals" class="form-input"></label>
         </div>
-        <button class="action-btn save-rules-btn" @click="saveRules(tempRules); alert('算法参数已更新！')">💾 保存规则</button>
+        <button class="action-btn save-rules-btn" @click="handleSaveRules">💾 保存规则</button>
       </div>
     </details>
 
@@ -29,8 +29,7 @@
         <div class="sleek-toolbar">
           <button class="pill-btn add" @click.prevent="openModal()">➕ 新增</button>
           <div class="toolbar-right">
-            <ImportData @data-parsed="handleImportedData" />
-            <button class="pill-btn export" @click.prevent="exportData">📤 导出</button>
+            <button class="pill-btn sync" @click.prevent="showSyncModal = true">🔄 导入 / 导出</button>
             <button class="pill-btn clear" @click.prevent="showClearConfirmModal = true">🗑️ 清空</button>
           </div>
         </div>
@@ -52,14 +51,13 @@
       </div>
     </details>
 
+    <ImportExportModal v-if="showSyncModal" @close="showSyncModal = false" @data-parsed="handleImportedData" />
+
     <div class="modal-overlay" v-if="showDeleteConfirmModal" @click.self="showDeleteConfirmModal = false">
       <div class="nice-modal">
         <h3>🗑️ 确认删除</h3>
         <p>确定要删除这个食谱吗？此操作不可撤销。</p>
-        <div class="modal-footer">
-          <button class="cancel-btn" @click="showDeleteConfirmModal = false">取消</button>
-          <button class="danger-btn" @click="confirmDeleteFood">确认删除</button>
-        </div>
+        <div class="modal-footer"><button class="cancel-btn" @click="showDeleteConfirmModal = false">取消</button><button class="danger-btn" @click="confirmDeleteFood">确认删除</button></div>
       </div>
     </div>
 
@@ -67,10 +65,7 @@
       <div class="nice-modal">
         <h3>🗑️ 确认清空</h3>
         <p>确定要清空<b>所有食谱数据</b>吗？操作不可撤销。</p>
-        <div class="modal-footer">
-          <button class="cancel-btn" @click="showClearConfirmModal = false">取消</button>
-          <button class="danger-btn" @click="confirmClearAll">确认清空</button>
-        </div>
+        <div class="modal-footer"><button class="cancel-btn" @click="showClearConfirmModal = false">取消</button><button class="danger-btn" @click="confirmClearAll">确认清空</button></div>
       </div>
     </div>
 
@@ -103,24 +98,39 @@
         <div class="modal-footer"><button class="cancel-btn" @click="showModal = false">取消</button><button class="confirm-btn" @click="saveForm">保存</button></div>
       </div>
     </div>
+
+    <div class="toast-notification" v-if="toastMsg">{{ toastMsg }}</div>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed } from 'vue';
 import { useFoodConfig } from '../composables/useFoodConfig';
-import ImportData from './ImportData.vue';
+import ImportExportModal from './ImportExportModal.vue';
 
-const { allFoods, rules, saveFoods, saveRules, allAvailableTags, exportData } = useFoodConfig();
+const { allFoods, rules, saveFoods, saveRules, allAvailableTags } = useFoodConfig();
 const tempRules = reactive({ ...rules.value });
 
+// --- 🌟 自定义提示系统 ---
+const toastMsg = ref('');
+const showToast = (msg) => {
+  toastMsg.value = msg;
+  setTimeout(() => toastMsg.value = '', 3000);
+};
+
+const handleSaveRules = () => {
+  saveRules(tempRules);
+  showToast('✅ 算法参数已更新，转盘已同步重算！');
+};
+
+const showSyncModal = ref(false);
 const showClearConfirmModal = ref(false);
 const confirmClearAll = () => { saveFoods([]); showClearConfirmModal.value = false; };
 
 const showDeleteConfirmModal = ref(false);
 const itemToDelete = ref(null);
 const triggerDelete = (id) => { itemToDelete.value = id; showDeleteConfirmModal.value = true; };
-const confirmDeleteFood = () => { if (itemToDelete.value) saveFoods(allFoods.value.filter(f => f.id !== itemToDelete.value)); showDeleteConfirmModal.value = false; itemToDelete.value = null; };
+const confirmDeleteFood = () => { if (itemToDelete.value) saveFoods(allFoods.value.filter(f => f.id !== itemToDelete.value)); showDeleteConfirmModal.value = false; itemToDelete.value = null; showToast("✅ 已删除"); };
 
 const sortedFoods = computed(() => {
   return [...allFoods.value].sort((a, b) => {
@@ -154,24 +164,29 @@ const addNewTag = () => {
   if (!t) return;
   if (!formData.tags.includes(t)) {
     if (formData.tags.length < 10) formData.tags.push(t);
-    else alert("最多只能选择 10 个标签！");
+    else showToast("⚠️ 最多只能选择 10 个标签！");
   }
   newTagInput.value = ""; 
 };
 
 const saveForm = () => {
-  if (!formData.name.trim()) return alert("名称不能为空！");
+  if (!formData.name.trim()) return showToast("⚠️ 名称不能为空！");
   const foodsCopy = [...allFoods.value];
   if (formData.isGroup) formData.tags = []; else formData.childIds = [];
   if (isEditing.value) { const idx = foodsCopy.findIndex(f => f.id === formData.id); if(idx > -1) foodsCopy[idx] = { ...formData }; } 
   else { foodsCopy.push({ ...formData }); }
-  saveFoods(foodsCopy); showModal.value = false;
+  saveFoods(foodsCopy); showModal.value = false; showToast("✅ 保存成功");
 };
 
-const handleImportedData = (data) => { if (data.foods) saveFoods(data.foods); if (data.rules) saveRules(data.rules); alert("🎉 导入成功！"); };
+const handleImportedData = (data) => { 
+  if (data.foods) saveFoods(data.foods); 
+  if (data.rules) saveRules(data.rules); 
+  showToast("🎉 数据导入成功！"); 
+};
 </script>
 
 <style scoped>
+/* 保持原有 UI 样式不变，新增 Toast 样式即可 */
 .manage-container { width: 100%; }
 .modern-details { background: white; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
 .modern-details summary { padding: 15px 20px; font-size: 16px; font-weight: bold; color: #333; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; background: #fafafa; border-radius: 12px; transition: background 0.2s; }
@@ -182,16 +197,14 @@ const handleImportedData = (data) => { if (data.foods) saveFoods(data.foods); if
 .details-content { padding: 15px 20px 20px 20px; border-top: 1px solid #eee; animation: fadeIn 0.3s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
-/* 🌟 优雅的药丸工具栏 */
 .sleek-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
 .toolbar-right { display: flex; gap: 8px; flex-wrap: wrap; }
 .pill-btn { display: inline-flex; align-items: center; gap: 4px; padding: 8px 14px; border-radius: 20px; font-size: 13px; font-weight: bold; cursor: pointer; border: 1px solid transparent; transition: all 0.2s; }
 .pill-btn:active { transform: scale(0.95); }
 .pill-btn.add { background: #e8f5e9; color: #2e7d32; border-color: #c8e6c9; }
-.pill-btn.export { background: #e3f2fd; color: #1565c0; border-color: #bbdefb; }
+.pill-btn.sync { background: #e3f2fd; color: #1565c0; border-color: #bbdefb; }
 .pill-btn.clear { background: #ffebee; color: #c62828; border-color: #ffcdd2; }
 
-/* 规则区域 */
 .rules-help { background: #fff3e0; padding: 12px; border-radius: 8px; font-size: 13px; color: #e65100; margin-bottom: 15px; border-left: 4px solid #ff9800; }
 .rules-help p { margin: 6px 0; } 
 .rules-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 15px;}
@@ -199,7 +212,6 @@ const handleImportedData = (data) => { if (data.foods) saveFoods(data.foods); if
 .rules-grid .full-width { grid-column: span 2; } 
 .save-rules-btn { background: #FF9800; color: white; width: 100%; margin-top: 5px; }
 
-/* 列表区域 */
 .food-grid { display: grid; gap: 12px; grid-template-columns: 1fr; }
 @media (min-width: 600px) { .food-grid { grid-template-columns: repeat(2, 1fr); } }
 .food-card { background: white; padding: 15px; border-radius: 12px; border: 1px solid #eee; display: flex; justify-content: space-between; border-left: 4px solid #4CAF50; }
@@ -215,7 +227,6 @@ const handleImportedData = (data) => { if (data.foods) saveFoods(data.foods); if
 .icon-btn.edit:hover { background: #e3f2fd; } 
 .icon-btn.delete:hover { background: #ffebee; }
 
-/* 弹窗通用 */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
 .modal-content { background: white; padding: 20px; border-radius: 16px; width: 100%; max-width: 400px; max-height: 90vh; overflow-y: auto; animation: zoomIn 0.2s ease;}
 .nice-modal { background: white; width: 90%; max-width: 320px; padding: 20px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); animation: zoomIn 0.2s ease; }
@@ -247,4 +258,15 @@ const handleImportedData = (data) => { if (data.foods) saveFoods(data.foods); if
 .action-btn { padding: 10px 16px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; text-align: center; }
 
 @keyframes zoomIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* 🌟 美化 Toast 吐司提示样式 */
+.toast-notification {
+  position: fixed; top: 40px; left: 50%; transform: translateX(-50%);
+  background: rgba(40, 40, 40, 0.95); color: white; padding: 12px 20px;
+  border-radius: 30px; font-size: 14px; z-index: 3000; font-weight: bold;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2); white-space: nowrap;
+  animation: dropDown 0.3s ease, fadeOut 0.3s ease 2.7s forwards;
+}
+@keyframes dropDown { from { top: -20px; opacity: 0; } to { top: 40px; opacity: 1; } }
+@keyframes fadeOut { to { opacity: 0; visibility: hidden; } }
 </style>
